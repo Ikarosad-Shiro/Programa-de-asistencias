@@ -6,7 +6,7 @@ from datetime import datetime
 from pymongo import UpdateOne
 from pymongo.errors import PyMongoError
 from zk import ZK
-from typing import Set
+from typing import Set, Iterable, Dict, Any
 
 from servicios.mongo_service import conectar_mongo
 from servicios.checador_service import IPS, PUERTO  # usamos tu listado de IPs y puerto
@@ -14,169 +14,261 @@ from servicios.checador_service import IPS, PUERTO  # usamos tu listado de IPs y
 # 🔒 1..100 reservado (admins/servicio/etc.)
 RANGO_RESERVADO_MAX = 99  # trabajadores válidos: id_checador > 100
 
+def _uid_from_zk_user(u) -> int | None:
+    """
+    Extrae UID/int del usuario del checador (ZKTeco), tolerante a dicts/objetos.
+    """
+    if isinstance(u, dict):
+        for k in ("user_id", "uid", "uid_number", "uidNumber", "enroll_id", "id"):
+            v = u.get(k)
+            if v is not None:
+                try:
+                    return int(str(v).strip())
+                except Exception:
+                    pass
+        return None
+
+    for attr in ("user_id", "uid", "uid_number", "uidNumber", "enroll_id", "id"):
+        if hasattr(u, attr):
+            try:
+                return int(str(getattr(u, attr)).strip())
+            except Exception:
+                pass
+    return None
+
+def _to_int_list(xs: Iterable[Any]) -> list[int]:
+    out = []
+    for x in (xs or []):
+        try:
+            out.append(int(x))
+        except Exception:
+            continue
+    return out
+
+def _build_or_merge_sync_list(trab: dict, sedes_map: Dict[int, str]) -> list[dict]:
+    """
+    Devuelve el arreglo sincronizacionSedes completo (principal + foráneas),
+    preservando estados existentes y agregando faltantes con sincronizado=False.
+    Estructura de cada item:
+      { "id": <int>, "nombre": <str>, "sincronizado": <bool>, "fecha": <ISO> }
+    """
+    ids = []
+    sedeP = trab.get("sedePrincipal", trab.get("sede"))
+    if isinstance(sedeP, int) or (isinstance(sedeP, str) and sedeP.isdigit()):
+        ids.append(int(sedeP))
+    ids.extend(_to_int_list(trab.get("sedesForaneas")))
+
+    ids = sorted(set(ids))
+    existing = trab.get("sincronizacionSedes") or []
+    by_id = {e.get("id"): e for e in existing if isinstance(e, dict) and "id" in e}
+
+    merged = []
+    for sid in ids:
+        e = by_id.get(sid, {"id": sid, "nombre": sedes_map.get(sid, f"Sede {sid}"), "sincronizado": False})
+        if "nombre" not in e:
+            e["nombre"] = sedes_map.get(sid, f"Sede {sid}")
+        if "sincronizado" not in e:
+            e["sincronizado"] = False
+        merged.append(e)
+
+    return merged
+
+def _all_true_sync(sync_list: list[dict], expected_ids: set[int]) -> bool:
+    """
+    True si todos los ids esperados existen en el arreglo y están sincronizado=True.
+    """
+    seen = {e.get("id") for e in (sync_list or []) if e.get("sincronizado") is True}
+    return expected_ids and expected_ids.issubset(seen)
+
+def _get_privilege(u):
+    """
+    Intenta leer el privilegio del usuario del checador.
+    Soporta dicts y objetos. Devuelve un int si puede, o un str normalizado.
+    Convenciones comunes ZK: 0=USER, 1..=ADMIN/MANAGER (a veces 14/15).
+    """
+    val = None
+    keys = ("privilege", "role", "privilege_id", "user_privilege")
+    if isinstance(u, dict):
+        for k in keys:
+            if k in u and u[k] is not None:
+                val = u[k]
+                break
+    else:
+        for k in keys:
+            if hasattr(u, k):
+                val = getattr(u, k)
+                break
+
+    if val is None:
+        return None
+
+    # normaliza
+    try:
+        return int(str(val).strip())
+    except Exception:
+        s = str(val).strip().lower()
+        # casos tipo 'admin', 'manager', 'user'
+        if "admin" in s or "manager" in s or "super" in s:
+            return 1  # lo tratamos como admin
+        if "user" in s or "normal" in s:
+            return 0
+        return None
+
+def _is_device_admin(u) -> bool:
+    """
+    True si el usuario del checador es admin/manager según privilege.
+    """
+    p = _get_privilege(u)
+    if p is None:
+        return False
+    # criterio conservador: cualquier valor > 0 lo tratamos como admin
+    return isinstance(p, int) and p > 0
+
+
+#-------------------------------------------
+
 def _cargar_config():
     if not os.path.exists("configuracion_temporal.json"):
         return None
     with open("configuracion_temporal.json", "r", encoding="utf-8") as f:
         return json.load(f)
 
-def agregar_trabajadores_de_sede(sede_id=None, log_fn=print):
+def agregar_trabajadores_de_sede(sede_id: int, log_fn=print):
     """
-    Agrega al checador los trabajadores de la sede dada que:
-      - estado == 'activo'
-      - id_checador > 100 (evita rango reservado 1..100)
-      - aún no existen en el checador
-    
-    Además, marca sincronizado=True en Mongo tanto si se agregan como si ya existían en el checador.
-
-    sede_id: int | None  → si es None, se toma de configuracion_temporal.json
-    log_fn:  callable    → función para log (por defecto print)
-    Retorna: dict(resumen) con agregados, saltados, marcados y errores
+    Agrega/actualiza en el checador TODOS los trabajadores activos cuya sedePrincipal == sede_id
+    o que tengan sede_id en sus sedesForaneas. Además:
+      - Crea/Merge el arreglo `sincronizacionSedes` con todas sus sedes (principal + foráneas).
+      - Marca como True la entrada de la sede actual al agregarlos al checador (si no existían).
+      - Actualiza `sincronizado` del trabajador a True solo si TODAS sus sedes están True.
     """
-    # ✅ Asegurar logger válido
-    if not callable(log_fn):
-        log_fn = print
-
-    # ✅ Sede desde arg o desde la config temporal
-    if sede_id is None:
-        cfg = _cargar_config()
-        if not cfg:
-            log_fn("❌ No se encontró configuracion_temporal.json")
-            return {"agregados": 0, "saltados": 0, "marcados": 0, "errores": 1}
-        sede_id = cfg.get("sede")
-        if sede_id is None:
-            log_fn("❌ La configuración no contiene 'sede'.")
-            return {"agregados": 0, "saltados": 0, "marcados": 0, "errores": 1}
-
-    # 1) Conectar a Mongo
-    cliente, msg = conectar_mongo()
-    if not cliente:
-        log_fn(f"❌ MongoDB: {msg}")
-        return {"agregados": 0, "saltados": 0, "marcados": 0, "errores": 1}
-
-    db = cliente["Registro_Alu"]
-    col_trab = db["trabajadores"]
-
-    # 2) Obtener trabajadores válidos de la sede
     try:
-        filtro = {
-            "sede": int(sede_id),
-            "estado": "activo",
-            "id_checador": {"$gt": RANGO_RESERVADO_MAX}  # > 100
-        }
-        campos = {"_id": 1, "id_checador": 1, "nombre": 1, "sincronizado": 1}
-        trabajadores = list(col_trab.find(filtro, campos))
-    except PyMongoError as e:
-        log_fn(f"❌ Error consultando trabajadores: {e}")
-        return {"agregados": 0, "saltados": 0, "marcados": 0, "errores": 1}
+        # Conexión a Mongo
+        from servicios.mongo_service import conectar_mongo
+        cliente, msg = conectar_mongo()
+        if not cliente:
+            log_fn(f"❌ Mongo: {msg}")
+            return
+        db = cliente["Registro_Alu"]
 
-    if not trabajadores:
-        log_fn(f"ℹ️ No hay trabajadores activos con id_checador > {RANGO_RESERVADO_MAX} para la sede {sede_id}.")
-        return {"agregados": 0, "saltados": 0, "marcados": 0, "errores": 0}
+        # Mapa de sedes (id -> nombre)
+        sedes_docs = list(db.sedes.find({}, {"_id": 0, "id": 1, "nombre": 1}))
+        sedes_map = {int(d["id"]): d.get("nombre", f"Sede {d['id']}") for d in sedes_docs if "id" in d}
 
-    # 3) Conectar al checador recorriendo IPs conocidas
-    conn = None
-    checador_ip = None
-    for ip in IPS:
+        # Conexión al checador
+        from servicios.checador_service import conectar_checador
+        conn, ip = conectar_checador()
+        if not conn:
+            log_fn("❌ No se pudo conectar al checador.")
+            return
+        log_fn(f"🔌 Conectado al checador en {ip}")
+
+        # Usuarios existentes en el checador (para evitar duplicados)
         try:
-            log_fn(f"🔌 Intentando conectar con checador {ip}:{PUERTO}...")
-            zk = ZK(ip, port=PUERTO, timeout=8)
-            conn = zk.connect()
-            checador_ip = ip
-            log_fn(f"✅ Conectado a checador {ip}")
-            break
-        except (socket.timeout, socket.error) as e:
-            log_fn(f"🌐 {ip}:{PUERTO} no disponible → {e}")
+            users = conn.get_users()
+            existentes = set()
+            for u in users:
+                n = _uid_from_zk_user(u)
+                if n is not None:
+                    existentes.add(n)
         except Exception as e:
-            log_fn(f"🧨 Error conectando a {ip}:{PUERTO} → {e}")
+            log_fn(f"⚠️ No se pudieron listar usuarios del checador: {e}")
+            existentes = set()
 
-    if not conn:
-        log_fn("❌ No fue posible conectar a ningún checador.")
-        return {"agregados": 0, "saltados": 0, "marcados": 0, "errores": 1}
+        # Query de trabajadores objetivo (activos con id_checador)
+        q = {
+            "estado": "activo",
+            "id_checador": {"$ne": None},
+            "$or": [
+                {"sedePrincipal": sede_id},
+                {"sedesForaneas": sede_id},
+                {"sede": sede_id}  # respaldo por si aún usan `sede`
+            ]
+        }
+        trabajadores = list(db.trabajadores.find(q))
 
-    # 4) Obtener usuarios actuales del checador
-    try:
-        actuales = conn.get_users()
-        ids_checador = {int(u.user_id) for u in actuales}
-    except Exception as e:
-        log_fn(f"❌ Error obteniendo usuarios del checador: {e}")
+        if not trabajadores:
+            log_fn("ℹ️ No hay trabajadores que coincidan con esta sede.")
+            try:
+                conn.disconnect()
+            except Exception:
+                pass
+            return
+
+        log_fn(f"👷‍♀️ Trabajadores candidatos: {len(trabajadores)}")
+
+        procesados, dados_de_alta, ya_existian, errores = 0, 0, 0, 0
+
+        for t in trabajadores:
+            procesados += 1
+            nombre = t.get("nombre", "(sin nombre)")
+            try:
+                uid = int(str(t["id_checador"]))
+            except Exception:
+                log_fn(f"⛔ {nombre}: id_checador inválido → {t.get('id_checador')}")
+                errores += 1
+                continue
+
+            # 1) Construir/merge sincronizacionSedes (todas las sedes del trabajador)
+            ids_sedes = []
+            sedeP = t.get("sedePrincipal", t.get("sede"))
+            if isinstance(sedeP, int) or (isinstance(sedeP, str) and sedeP.isdigit()):
+                ids_sedes.append(int(sedeP))
+            ids_sedes.extend(_to_int_list(t.get("sedesForaneas")))
+            ids_sedes = sorted(set(ids_sedes))
+            expected_set = set(ids_sedes)
+
+            sync_list = _build_or_merge_sync_list(t, sedes_map)
+            # Persistir merge si cambió la forma
+            db.trabajadores.update_one(
+                {"_id": t["_id"]},
+                {"$set": {"sincronizacionSedes": sync_list}}
+            )
+
+            # 2) ¿Debe estar en ESTE checador (sede actual)?
+            if sede_id not in expected_set:
+                # No corresponde a esta sede; no lo toques en checador, pero deja su lista completa
+                log_fn(f"↪️ {nombre}: no pertenece a esta sede ({sede_id}); skip en checador.")
+            else:
+                # 3) Alta en checador si no existe
+                try:
+                    if uid not in existentes:
+                        # set_user: cuida los parámetros de tu SDK/ZK
+                        conn.set_user(uid=uid, name=nombre, privilege=0, password="")
+                        existentes.add(uid)
+                        dados_de_alta += 1
+                        log_fn(f"✅ Alta checador: {uid} - {nombre}")
+                    else:
+                        ya_existian += 1
+                        log_fn(f"↔️ Ya estaba en checador: {uid} - {nombre}")
+
+                    # 4) Marcar sede actual como sincronizada en el arreglo
+                    db.trabajadores.update_one(
+                        {"_id": t["_id"], "sincronizacionSedes.id": sede_id},
+                        {"$set": {
+                            "sincronizacionSedes.$.sincronizado": True,
+                            "sincronizacionSedes.$.fecha": datetime.utcnow().isoformat()
+                        }}
+                    )
+                except Exception as e:
+                    errores += 1
+                    log_fn(f"❌ Error alta checador {uid} - {nombre}: {e}")
+                    continue
+
+            # 5) Releer lista y actualizar bandera global `sincronizado`
+            t_ref = db.trabajadores.find_one({"_id": t["_id"]}, {"sincronizacionSedes": 1})
+            all_true = _all_true_sync(t_ref.get("sincronizacionSedes", []), expected_set)
+            db.trabajadores.update_one({"_id": t["_id"]}, {"$set": {"sincronizado": bool(all_true)}})
+
+        # Resumen
+        log_fn(f"— Fin — Procesados: {procesados} | Altas: {dados_de_alta} | Ya estaban: {ya_existian} | Errores: {errores}")
+
         try:
             conn.disconnect()
         except Exception:
             pass
-        return {"agregados": 0, "saltados": 0, "marcados": 0, "errores": 1}
 
-    log_fn(f"📡 Checador en {checador_ip}: {len(ids_checador)} usuarios existentes.")
-
-    agregados = 0
-    saltados = 0
-    marcados = 0  # ← nuevos: cuántos solo se marcaron como sincronizados
-    errores = 0
-    ops = []  # updates en Mongo
-
-    # 5) Procesar trabajadores
-    for t in trabajadores:
-        uid = int(t["id_checador"])
-        nombre = (t.get("nombre") or "").strip()
-
-        if uid <= RANGO_RESERVADO_MAX:
-            log_fn(f"⛔ ID {uid} está en el rango reservado 1..{RANGO_RESERVADO_MAX}. Saltando.")
-            saltados += 1
-            continue
-
-        # Si YA existe en checador, no lo agregamos, pero marcamos sincronizado en Mongo si hiciera falta
-        if uid in ids_checador:
-            saltados += 1
-            if not t.get("sincronizado", False):
-                ops.append(UpdateOne(
-                    {"_id": t["_id"]},
-                    {"$set": {"sincronizado": True, "ultima_sincronizacion": datetime.utcnow()}}
-                ))
-                marcados += 1
-                log_fn(f"🔵 Ya estaba en checador: {uid} - {nombre}. Marcado como sincronizado en Mongo.")
-            else:
-                log_fn(f"➡️ Ya existe en checador: {uid} - {nombre}. (Sin cambios)")
-            continue
-
-        # Si NO existe en checador → agregar
-        nombre_limpio = nombre[:24]  # muchos ZK limitan el nombre aprox a 24 chars
-
-        try:
-            conn.set_user(
-                uid=uid,
-                name=nombre_limpio,
-                privilege=0,
-                password="",
-                group_id="",
-                user_id=str(uid)
-            )
-            agregados += 1
-            log_fn(f"✅ Agregado: {uid} - {nombre_limpio}")
-
-            # marcar sincronizado en Mongo
-            ops.append(UpdateOne(
-                {"_id": t["_id"]},
-                {"$set": {"sincronizado": True, "ultima_sincronizacion": datetime.utcnow()}}
-            ))
-        except Exception as e:
-            errores += 1
-            log_fn(f"❌ Error al agregar {uid} - {nombre_limpio}: {e}")
-
-    # 6) Guardar marca de sincronización en lote
-    if ops:
-        try:
-            col_trab.bulk_write(ops, ordered=False)
-        except Exception as e:
-            log_fn(f"⚠️ No se pudo actualizar 'sincronizado' en Mongo: {e}")
-
-    try:
-        conn.disconnect()
-    except Exception:
-        pass
-
-    resumen = {"agregados": agregados, "saltados": saltados, "marcados": marcados, "errores": errores}
-    log_fn(f"📊 Resumen → {resumen}")
-    return resumen
+    except Exception as e:
+        log_fn(f"🧨 Error inesperado en agregar_trabajadores_de_sede: {e}")
 
 # --- Limpieza automática: elimina del checador lo que NO es de la sede ni admin ---
 
@@ -208,277 +300,211 @@ def _ids_permitidos_por_sede(sede_id: int, log_fn=print) -> Set[int]:
         return set()
 
 def eliminar_trabajadores_no_sede(
-    sede_id=None,
+    sede_id: int,
     log_fn=print,
-    dry_run=True,
-    show_details=True,
-    preset_candidatos=None
+    dry_run: bool = True,
+    show_details: bool = True,
+    preset_candidatos: list[dict] | None = None
 ):
     """
-    Limpia el checador eliminando usuarios que:
-      - NO estén en Mongo como activos de la sede con id_checador > RANGO_RESERVADO_MAX
-      - Y tengan privilege == 0 (usuario normal)
-      - Además, si uid <= RANGO_RESERVADO_MAX y privilege == 0 → eliminar (no debería existir)
-
-    Conserva siempre:
-      - Cualquiera con privilege != 0 (admin/supervisor)
-      - Quienes estén en la sede actual (Mongo)
-
-    Parámetros:
-      - dry_run: si True, NO elimina; solo muestra candidatos.
-      - show_details: si True, imprime admins, lista de sede con nombres, etc.
-      - preset_candidatos: lista de IDs ya calculados (para aplicar sin repetir logs).
+    Elimina del checador a usuarios que NO pertenecen a la sede actual.
+    Protecciones:
+      - NO eliminar admins del checador (privilege > 0).
+      - NO eliminar trabajadores con rol admin en Mongo.
+      - Inactivos sí son candidatos a eliminar.
+    También limpia 'sincronizacionSedes' y recalcula 'sincronizado'.
     """
-    if not callable(log_fn):
-        log_fn = print
-
-    # 1) Sede
-    if sede_id is None:
-        cfg = _cargar_config()
-        if not cfg:
-            log_fn("❌ No se encontró configuracion_temporal.json")
-            return {"eliminados": [], "candidatos": [], "admins": [], "sede": [], "total_actuales": 0, "errores": 1}
-        sede_id = cfg.get("sede")
-        if sede_id is None:
-            log_fn("❌ La configuración no contiene 'sede'.")
-            return {"eliminados": [], "candidatos": [], "admins": [], "sede": [], "total_actuales": 0, "errores": 1}
-    sede_id = int(sede_id)
-
-    # Si nos pasan candidatos precomputados, saltamos el escaneo detallado
-    if preset_candidatos is not None:
-        try:
-            candidatos = list(sorted(set(int(x) for x in preset_candidatos)))
-        except Exception:
-            candidatos = []
-        admins = []
-        de_sede = []
-        usuarios = [None] * len(candidatos)
-        checador_ip = "preset"
-        show_details = False  # no mostramos detalle en la ejecución real
-    else:
-        # 2) IDs permitidos (desde Mongo)
-        log_fn(f"🔎 Consultando IDs permitidos (sede {sede_id}) en Mongo…")
-        ids_permitidos = _ids_permitidos_por_sede(sede_id, log_fn=log_fn)
-        if show_details:
-            log_fn(f"✅ IDs de la sede: {sorted(ids_permitidos) if ids_permitidos else '—'}")
-
-        # 3) Conectar al checador (recorriendo IPs conocidas)
-        conn = None
-        checador_ip = None
-        zk = None
-        for ip in IPS:
-            try:
-                log_fn(f"🔌 Intentando checador {ip}:{PUERTO}…")
-                zk = ZK(ip, port=PUERTO, timeout=8)
-                conn = zk.connect()
-                checador_ip = ip
-                log_fn(f"✅ Conectado a {ip}")
-                break
-            except (socket.timeout, socket.error) as e:
-                if show_details:
-                    log_fn(f"🌐 {ip}:{PUERTO} no disponible → {e}")
-            except Exception as e:
-                if show_details:
-                    log_fn(f"🧨 Error conectando a {ip}:{PUERTO} → {e}")
-
-        if not conn:
-            log_fn("❌ No fue posible conectar a ningún checador.")
-            return {"eliminados": [], "candidatos": [], "admins": [], "sede": [], "total_actuales": 0, "errores": 1}
-
-        # 4) Leer usuarios del checador
-        try:
-            conn.disable_device()
-            usuarios = conn.get_users()
-        except Exception as e:
-            log_fn(f"❌ Error leyendo usuarios: {e}")
-            try:
-                conn.enable_device(); conn.disconnect()
-            except Exception:
-                pass
-            return {"eliminados": [], "candidatos": [], "admins": [], "sede": [], "total_actuales": 0, "errores": 1}
-
-        admins = []
-        de_sede = []
-        candidatos = []
-
-        for u in usuarios:
-            try:
-                uid = int(u.user_id)
-            except Exception:
-                continue
-            privilege = getattr(u, "privilege", 0)
-
-            # Mantener si es de la sede
-            if uid in ids_permitidos:
-                de_sede.append(uid)
-                continue
-
-            # Mantener si es admin/supervisor
-            if privilege != 0:
-                admins.append(uid)
-                continue
-
-            # Seguridad: si está en 1..99 y privilege==0 → eliminar
-            if uid <= RANGO_RESERVADO_MAX and privilege == 0:
-                candidatos.append(uid)
-                continue
-
-            # Usuario normal fuera de la sede → eliminar
-            candidatos.append(uid)
-
-        # Logs de detalle (solo en preview)
-        if show_details:
-            log_fn(f"📋 Checador {checador_ip}: total usuarios = {len(usuarios)}")
-            log_fn(f"🛡️ Admins detectados (privilege!=0): {sorted(admins) if admins else '—'}")
-
-            # 4.1) Imprimir los nombres de los IDs de la sede (bonito)
-            if de_sede:
-                log_fn("🏷️ IDs pertenecientes a la sede:")
-                try:
-                    cliente, msg = conectar_mongo()
-                    if cliente is not None:
-                        db = cliente["Registro_Alu"]
-                        col_trab = db["trabajadores"]
-                        for sid in sorted(de_sede):
-                            info = col_trab.find_one({"id_checador": sid}, {"nombre": 1})
-                            if info and info.get("nombre"):
-                                log_fn(f"   ➡️ {sid} - {info['nombre']}")
-                            else:
-                                log_fn(f"   ➡️ {sid} - (Sin nombre en Mongo)")
-                    else:
-                        for sid in sorted(de_sede):
-                            log_fn(f"   ➡️ {sid} - (No se pudo conectar a Mongo)")
-                except Exception as e:
-                    log_fn(f"⚠️ Error consultando nombres en Mongo: {e}")
-            else:
-                log_fn("🏷️ IDs pertenecientes a la sede: —")
-
-            # 4.2) Candidatos
-            log_fn(f"🗑️ Candidatos a eliminar: {sorted(candidatos) if candidatos else '—'}")
-
-        # Si es DRY-RUN o no hay candidatos → cerrar conexión y devolver
-        if dry_run or not candidatos:
-            if dry_run and show_details:
-                log_fn("🧪 DRY-RUN o sin candidatos: no se elimina nada.")
-            try:
-                conn.enable_device(); conn.disconnect()
-            except Exception:
-                pass
-            return {
-                "eliminados": [],
-                "candidatos": sorted(candidatos),
-                "admins": sorted(admins),
-                "sede": sorted(de_sede),
-                "total_actuales": len(usuarios),
-                "errores": 0
-            }
-
-        # Si SÍ vamos a eliminar (y no venimos con preset), dejamos conexión abierta para borrar
-        col_trab = None
-        try:
-            cliente, msg = conectar_mongo()
-            if cliente:
-                db = cliente["Registro_Alu"]
-                col_trab = db["trabajadores"]
-        except Exception:
-            col_trab = None
-
-        eliminados = []
-        errores = 0
-
-        for uid in sorted(set(candidatos)):
-            try:
-                # Buscar info en Mongo por id_checador (si hay conexión)
-                nombre = None
-                if col_trab is not None:
-                    info_trab = col_trab.find_one({"id_checador": uid}, {"nombre": 1})
-                    if info_trab and info_trab.get("nombre"):
-                        nombre = info_trab["nombre"]
-
-                # Eliminar en checador
-                conn.delete_user(uid)
-
-                # Log estilo "agregar"
-                if nombre:
-                    log_fn(f"🗑️ Eliminado del checador: {nombre}. (ID Checador: {uid})")
-                else:
-                    log_fn(f"🗑️ Eliminado del checador: (No registrado en Mongo). (ID Checador: {uid})")
-
-                eliminados.append(uid)
-
-            except Exception as e:
-                errores += 1
-                log_fn(f"❌ Error eliminando ID {uid}: {e}")
-
-        try:
-            conn.enable_device(); conn.disconnect()
-        except Exception:
-            pass
-
-        resumen = {"eliminados": len(eliminados), "candidatos": len(candidatos), "errores": errores}
-        log_fn(f"📊 Resumen → {resumen}")
-        return resumen
-
-    # ---------------------------
-    # Camino con preset_candidatos
-    # ---------------------------
-    # Con preset, solo hacemos la parte de eliminación (sin repetir detalles)
-    conn = None
-    checador_ip = None
-    zk = None
-    for ip in IPS:
-        try:
-            zk = ZK(ip, port=PUERTO, timeout=8)
-            conn = zk.connect()
-            checador_ip = ip
-            break
-        except Exception:
-            continue
-
-    if not conn:
-        log_fn("❌ No fue posible conectar a ningún checador para aplicar la eliminación.")
-        return {"eliminados": [], "candidatos": candidatos, "admins": [], "sede": [], "total_actuales": 0, "errores": 1}
-
-    # Conexión a Mongo para nombres (opcional)
-    col_trab = None
     try:
+        # 1) Mongo
+        from servicios.mongo_service import conectar_mongo
         cliente, msg = conectar_mongo()
-        if cliente:
-            db = cliente["Registro_Alu"]
-            col_trab = db["trabajadores"]
-    except Exception:
-        col_trab = None
+        if not cliente:
+            log_fn(f"❌ Mongo: {msg}")
+            return {"error": msg}
+        db = cliente["Registro_Alu"]
 
-    eliminados = []
-    errores = 0
+        sedes_docs = list(db.sedes.find({}, {"_id": 0, "id": 1, "nombre": 1}))
+        sedes_map = {int(d["id"]): d.get("nombre", f"Sede {d['id']}") for d in sedes_docs if "id" in d}
 
-    try:
-        conn.disable_device()
-        for uid in candidatos:
-            try:
-                nombre = None
-                if col_trab is not None:
-                    info_trab = col_trab.find_one({"id_checador": uid}, {"nombre": 1})
-                    if info_trab and info_trab.get("nombre"):
-                        nombre = info_trab["nombre"]
+        # 2) Checador
+        from servicios.checador_service import conectar_checador
+        conn, ip = conectar_checador()
+        if not conn:
+            log_fn("❌ No se pudo conectar al checador.")
+            return {"error": "no_checador"}
+        log_fn(f"🔌 Conectado al checador en {ip}")
 
-                conn.delete_user(uid)
-
-                if nombre:
-                    log_fn(f"🗑️ Eliminado del checador: {nombre}. (ID Checador: {uid})")
-                else:
-                    log_fn(f"🗑️ Eliminado del checador: (No registrado en Mongo). (ID Checador: {uid})")
-
-                eliminados.append(uid)
-            except Exception as e:
-                errores += 1
-                log_fn(f"❌ Error eliminando ID {uid}: {e}")
-    finally:
+        # 3) Usuarios en checador: guardamos UID y si es admin en dispositivo
+        users = []
         try:
-            conn.enable_device(); conn.disconnect()
+            users = conn.get_users()
+        except Exception as e:
+            log_fn(f"⚠️ No se pudieron listar usuarios del checador: {e}")
+
+        presentes_info: dict[int, bool] = {}
+        for u in users:
+            uid = _uid_from_zk_user(u)
+            if uid is None:
+                continue
+            presentes_info[uid] = _is_device_admin(u)
+
+        presentes_set = set(presentes_info.keys())
+
+        # 4) Trabajadores en Mongo (map por id_checador)
+        ROLES_EXCLUIDOS = {"admin", "administrador", "dios", "superadmin"}
+        cand_docs = list(db.trabajadores.find({"id_checador": {"$ne": None}}))
+        por_id = {}
+        for t in cand_docs:
+            try:
+                uid = int(str(t.get("id_checador")))
+            except Exception:
+                continue
+            por_id[uid] = t
+
+        def expected_set_for(t: dict) -> set[int]:
+            ids = []
+            sp = t.get("sedePrincipal", t.get("sede"))
+            if isinstance(sp, int) or (isinstance(sp, str) and sp.isdigit()):
+                ids.append(int(sp))
+            ids.extend(_to_int_list(t.get("sedesForaneas")))
+            return set(ids)
+
+        # 5) Detección de candidatos
+        candidatos = []
+        admins_device = []     # admins detectados en el equipo (protegidos)
+        admins_mongo = []      # admins por rol en Mongo (protegidos)
+        inactivos = []
+        desconocidos = []
+
+        for uid, is_admin_dev in presentes_info.items():
+            if is_admin_dev:
+                admins_device.append(uid)
+                continue  # 👈 NUNCA se elimina admin de dispositivo
+
+            t = por_id.get(uid)
+            if not t:
+                desconocidos.append(uid)
+                # Desconocido (no está en Mongo) y no-admin en dispositivo -> candidato
+                candidatos.append({
+                    "uid": uid,
+                    "nombre": f"(desconocido:{uid})",
+                    "motivo": "sin_registro_en_mongo",
+                    "sedePrincipal": None,
+                    "sedesForaneas": [],
+                    "permitidas": []
+                })
+                continue
+
+            estado = str(t.get("estado", "")).lower()
+            rol = str(t.get("rol", "")).lower()
+            if rol in ROLES_EXCLUIDOS:
+                admins_mongo.append({"uid": uid, "nombre": t.get("nombre", "")})
+                continue  # 👈 NUNCA se elimina admin de Mongo
+
+            if estado != "activo":
+                inactivos.append({"uid": uid, "nombre": t.get("nombre", "")})
+                # inactivo -> candidato a eliminar
+                candidatos.append({
+                    "uid": uid,
+                    "nombre": t.get("nombre", ""),
+                    "motivo": "inactivo",
+                    "sedePrincipal": t.get("sedePrincipal", t.get("sede")),
+                    "sedesForaneas": _to_int_list(t.get("sedesForaneas")),
+                    "permitidas": list(expected_set_for(t))
+                })
+                continue
+
+            permitidas = expected_set_for(t)
+            if sede_id not in permitidas:
+                candidatos.append({
+                    "uid": uid,
+                    "nombre": t.get("nombre", ""),
+                    "motivo": "no_pertenece_a_esta_sede",
+                    "sedePrincipal": t.get("sedePrincipal", t.get("sede")),
+                    "sedesForaneas": _to_int_list(t.get("sedesForaneas")),
+                    "permitidas": list(permitidas)
+                })
+
+        # Preview
+        if dry_run and show_details:
+            log_fn(f"👥 Usuarios en checador: {len(presentes_set)}")
+            log_fn(f"🟣 Admins en dispositivo (protegidos): {len(admins_device)} → {sorted(admins_device)[:20]}")
+            log_fn(f"🔵 Admins en Mongo (protegidos): {len(admins_mongo)}")
+            log_fn(f"🟡 Desconocidos: {len(desconocidos)}")
+            log_fn(f"🟠 Inactivos: {len(inactivos)}")
+            log_fn(f"🧹 Candidatos a eliminar (sede {sede_id}): {len(candidatos)}")
+            for c in candidatos[:50]:
+                log_fn(f"   - {c['uid']} · {c['nombre']} · motivo={c['motivo']} · permitidas={c['permitidas']}")
+
+        aplicar_sobre = candidatos if preset_candidatos is None else preset_candidatos
+
+        borrados, errores = 0, 0
+        if not dry_run:
+            for c in aplicar_sobre:
+                uid = c.get("uid")
+                nombre = c.get("nombre", "")
+
+                # Por seguridad extra: si justo antes de borrar alguien cambiara a admin en el dispositivo, revalida:
+                try:
+                    # algunos SDKs permiten get_user(uid); si no, recarga users list
+                    # fallback: si estaba marcado como admin_device, skip
+                    if uid in admins_device:
+                        log_fn(f"⛔ Saltado (admin en dispositivo): {uid} - {nombre}")
+                        continue
+                except Exception:
+                    pass
+
+                try:
+                    try:
+                        conn.delete_user(uid)
+                    except TypeError:
+                        conn.delete_user(uid=uid)
+                    borrados += 1
+                    log_fn(f"🗑️ Eliminado del checador: {uid} - {nombre}")
+                except Exception as e:
+                    errores += 1
+                    log_fn(f"❌ Error al eliminar {uid} - {nombre}: {e}")
+                    continue
+
+                # Actualizaciones en Mongo (si existe)
+                t = por_id.get(uid)
+                if not t:
+                    continue
+
+                # Reconstituye/mergea la lista de sincronización para mantener solo sedes válidas
+                sync_list = _build_or_merge_sync_list(t, sedes_map)
+                db.trabajadores.update_one(
+                    {"_id": t["_id"]},
+                    {"$set": {"sincronizacionSedes": sync_list}}
+                )
+
+                # Recalcula bandera global
+                permitidas = expected_set_for(t)
+                t_ref = db.trabajadores.find_one({"_id": t["_id"]}, {"sincronizacionSedes": 1})
+                all_true = _all_true_sync(t_ref.get("sincronizacionSedes", []), permitidas)
+                db.trabajadores.update_one({"_id": t["_id"]}, {"$set": {"sincronizado": bool(all_true)}})
+
+        try:
+            conn.disconnect()
         except Exception:
             pass
 
-    resumen = {"eliminados": len(eliminados), "candidatos": len(candidatos), "errores": errores}
-    log_fn(f"📊 Resumen → {resumen}")
-    return resumen
+        return {
+            "resumen": {
+                "presentes": len(presentes_set),
+                "admins_device": len(admins_device),
+                "admins_mongo": len(admins_mongo),
+                "desconocidos": len(desconocidos),
+                "inactivos": len(inactivos),
+                "candidatos": len(candidatos),
+                "borrados": borrados,
+                "errores": errores,
+                "sede": sede_id,
+                "dry_run": dry_run,
+            },
+            "candidatos": candidatos if dry_run else aplicar_sobre
+        }
+
+    except Exception as e:
+        log_fn(f"🧨 Error en eliminar_trabajadores_no_sede: {e}")
+        return {"error": str(e)}

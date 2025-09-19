@@ -4,18 +4,18 @@ import tkinter.messagebox as messagebox
 import sys
 import time
 import json
-import os, sys
+import os
 
 from servicios.mongo_service import conectar_mongo, obtener_sedes_completas
 from servicios.checador_service import conectar_checador_y_usuarios
 from servicios.sede_service import detectar_sede_por_checador
-from tkinter import simpledialog
 from shutdown_manager import set_main_window, hard_exit, run_cleanup
+
 # -------------------------------
 # Variables globales
+# -------------------------------
 cliente = None
 sede_actual = None  # Se guarda la sede seleccionada (temporalmente)
-# -------------------------------
 
 # 🪟 Ventana principal
 ventana = tk.Tk()
@@ -76,10 +76,31 @@ def iniciar_configuracion():
         trabajadores = list(cliente["Registro_Alu"].trabajadores.find({}))
         resultado = detectar_sede_por_checador(usuarios, trabajadores)
 
-        if not resultado or resultado["porcentaje"] < 30:
+        # 🔒 Soporta ambas versiones del detector:
+        # - Nueva: usa 'decision' (auto/debil/manual)
+        # - Antigua: usa solo 'porcentaje'
+        if not resultado:
             mostrar_formulario_manual()
+            return
+
+        # Log útil para diagnóstico
+        if "decision" in resultado:
+            print("🔎 Detector:", {
+                "decision": resultado.get("decision"),
+                "known/total": f"{resultado.get('known_ids', 0)}/{resultado.get('total_ids', 0)}",
+                "top3": resultado.get("top3", [])
+            })
+            if resultado["decision"] == "manual":
+                mostrar_formulario_manual()
+            else:
+                confirmar_sede_detectada(resultado["sede"], resultado.get("porcentaje", 0.0))
         else:
-            confirmar_sede_detectada(resultado["sede"], resultado["porcentaje"])
+            # Fallback a tu umbral anterior
+            if resultado.get("porcentaje", 0) < 30:
+                mostrar_formulario_manual()
+            else:
+                confirmar_sede_detectada(resultado["sede"], resultado["porcentaje"])
+
     except Exception as e:
         print(f"❌ Error al obtener trabajadores o detectar sede: {e}")
         mostrar_formulario_manual()
@@ -89,7 +110,7 @@ def salir():
         run_cleanup()
     finally:
         hard_exit(0)
-        
+
 def confirmar_sede_detectada(sede_id, porcentaje):
     global cliente
     try:
@@ -107,7 +128,13 @@ def confirmar_sede_detectada(sede_id, porcentaje):
     ventana_confirm.resizable(False, False)
     ventana_confirm.grab_set()
 
-    titulo = tk.Label(ventana_confirm, text="Sede detectada automáticamente ✅", font=("Segoe UI", 12, "bold"), bg="white", fg="#1a73e8")
+    titulo = tk.Label(
+        ventana_confirm,
+        text="Sede detectada automáticamente ✅",
+        font=("Segoe UI", 12, "bold"),
+        bg="white",
+        fg="#1a73e8"
+    )
     titulo.pack(pady=(15, 5))
 
     mensaje = (
@@ -122,8 +149,8 @@ def confirmar_sede_detectada(sede_id, porcentaje):
     def confirmar():
         global sede_actual
         sede_actual = sede_id
-        with open("configuracion_temporal.json", "w") as f:
-            json.dump({"sede": sede_actual, "nombre_sede": sede_nombre}, f)
+        with open("configuracion_temporal.json", "w", encoding="utf-8") as f:
+            json.dump({"sede": sede_actual, "nombre_sede": sede_nombre}, f, ensure_ascii=False)
         print(f"📌 Sede confirmada automáticamente: {sede_actual}")
         ventana_confirm.destroy()
         ventana.destroy()
@@ -137,12 +164,26 @@ def confirmar_sede_detectada(sede_id, porcentaje):
     frame_botones = tk.Frame(ventana_confirm, bg="white")
     frame_botones.pack()
 
-    btn_si = tk.Button(frame_botones, text="✅ Sí", width=10, font=("Segoe UI", 10, "bold"),
-                       bg="#28a745", fg="white", command=confirmar)
+    btn_si = tk.Button(
+        frame_botones,
+        text="✅ Sí",
+        width=10,
+        font=("Segoe UI", 10, "bold"),
+        bg="#28a745",
+        fg="white",
+        command=confirmar
+    )
     btn_si.grid(row=0, column=0, padx=10)
 
-    btn_no = tk.Button(frame_botones, text="❌ No", width=10, font=("Segoe UI", 10, "bold"),
-                       bg="#dc3545", fg="white", command=cancelar)
+    btn_no = tk.Button(
+        frame_botones,
+        text="❌ No",
+        width=10,
+        font=("Segoe UI", 10, "bold"),
+        bg="#dc3545",
+        fg="white",
+        command=cancelar
+    )
     btn_no.grid(row=0, column=1, padx=10)
 
 def mostrar_formulario_manual():
@@ -195,22 +236,27 @@ def mostrar_formulario_manual():
     # ✅ Botón confirmar
     def confirmar_seleccion():
         seleccion = combo.get()
-        if seleccion:
-            sede_id = int(seleccion.split(" - ")[0])
+        if not seleccion:
+            return
 
-            sede_seleccionada = next((s for s in sedes if s["id"] == sede_id), None)
-            if not sede_seleccionada:
-                messagebox.showerror("Error", "No se encontró la sede seleccionada.", parent=form)
-                return
+        sede_id = int(seleccion.split(" - ")[0])
+        sede_seleccionada = next((s for s in sedes if s["id"] == sede_id), None)
+        if not sede_seleccionada:
+            messagebox.showerror("Error", "No se encontró la sede seleccionada.", parent=form)
+            return
 
-            # 🔒 Pedir contraseña
-        def verificar_contraseña(contraseña_ingresada):
+        # 🔒 Pedir contraseña (definimos el callback adentro para capturar variables locales)
+        def verificar_contraseña(contraseña_ingresada: str):
             if contraseña_ingresada == sede_seleccionada.get("password"):
                 global sede_actual
                 sede_actual = sede_id
                 # 📝 Guardar configuración temporal en archivo
-                with open("configuracion_temporal.json", "w") as f:
-                    json.dump({"sede": sede_actual, "nombre_sede": sede_seleccionada["nombre"]}, f)
+                with open("configuracion_temporal.json", "w", encoding="utf-8") as f:
+                    json.dump(
+                        {"sede": sede_actual, "nombre_sede": sede_seleccionada["nombre"]},
+                        f,
+                        ensure_ascii=False
+                    )
                 print(f"📌 Sede seleccionada manualmente: {sede_actual}")
                 messagebox.showinfo("✅ Sede confirmada", "La contraseña es correcta.", parent=form)
                 form.destroy()
@@ -221,11 +267,7 @@ def mostrar_formulario_manual():
 
         pedir_contraseña_personalizada(sede_seleccionada['nombre'], verificar_contraseña)
 
-    btn_confirmar = ttk.Button(
-        form,
-        text="✅ Confirmar selección",
-        command=confirmar_seleccion
-    )
+    btn_confirmar = ttk.Button(form, text="✅ Confirmar selección", command=confirmar_seleccion)
     btn_confirmar.pack(pady=(20, 10), ipadx=8, ipady=5)
 
 def pedir_contraseña_personalizada(sede_nombre, callback_confirmacion):
@@ -265,17 +307,21 @@ def pedir_contraseña_personalizada(sede_nombre, callback_confirmacion):
 # 🎨 Estilo
 estilo = ttk.Style()
 estilo.theme_use("clam")
-estilo.configure("TButton",
-                 font=("Segoe UI", 11),
-                 padding=10,
-                 foreground="#fff",
-                 background="#007acc")
+estilo.configure(
+    "TButton",
+    font=("Segoe UI", 11),
+    padding=10,
+    foreground="#fff",
+    background="#007acc"
+)
 estilo.map("TButton", background=[("active", "#005f99")])
 
-estilo.configure("green.Horizontal.TProgressbar",
-                 troughcolor="#e0e0e0",
-                 background="#4caf50",
-                 thickness=20)
+estilo.configure(
+    "green.Horizontal.TProgressbar",
+    troughcolor="#e0e0e0",
+    background="#4caf50",
+    thickness=20
+)
 
 # 🖼️ UI General
 titulo = tk.Label(
@@ -328,7 +374,9 @@ progress_checad = ttk.Progressbar(ventana, style="green.Horizontal.TProgressbar"
 progress_checad.pack(pady=(5, 5))
 progress_checad.pack_forget()
 
+# 🚪 Manejo de cierre correcto (colócalo ANTES del mainloop)
+ventana.protocol("WM_DELETE_WINDOW", salir)
+
 # 🚀 Iniciar la interfaz
 if __name__ == "__main__":
     ventana.mainloop()
-    ventana.protocol("WM_DELETE_WINDOW", salir)
