@@ -1,0 +1,17 @@
+{
+  "timestamp_local": "2025-11-12T17:50:53.977896-06:00",
+  "modo": "manual",
+  "sede_id": 1,
+  "checador_ip": "192.168.1.101",
+  "ventana": {
+    "desde_local": "2025-11-05T00:00:00-06:00",
+    "hasta_local": "2025-11-13T00:00:00-06:00"
+  },
+  "ok": true,
+  "result": {
+    "ok": true,
+    "insertados": 0,
+    "actualizados": 0,
+    "eventos": 46
+  }
+}

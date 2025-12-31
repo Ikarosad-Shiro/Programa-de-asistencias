@@ -1,0 +1,13 @@
+{
+  "sede": 1,
+  "checador_ip": "192.168.1.101",
+  "generado": "2025-11-12T18:03:09.204308-06:00",
+  "documentos": [
+    {
+      "sede": 1,
+      "trabajador": "103",
+      "fecha": "2025-11-05",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": 

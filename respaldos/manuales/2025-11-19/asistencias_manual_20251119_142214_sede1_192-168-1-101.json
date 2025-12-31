@@ -1,0 +1,877 @@
+{
+  "sede": 1,
+  "checador_ip": "192.168.1.101",
+  "generado": "2025-11-19T14:22:14.768094-06:00",
+  "documentos": [
+    {
+      "fecha": "2025-11-12",
+      "sede": 1,
+      "trabajador": "109",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-12T15:05:39",
+          "fechaHoraLocal": "2025-11-12 09:05:39",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "109",
+          "sede": 1
+        },
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-13T00:22:08",
+          "fechaHoraLocal": "2025-11-12 18:22:08",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "109",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia Completa",
+      "salida_automatica": false,
+      "salida_registrada": true
+    },
+    {
+      "fecha": "2025-11-12",
+      "sede": 1,
+      "trabajador": "104",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-12T15:01:43",
+          "fechaHoraLocal": "2025-11-12 09:01:43",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "104",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-12",
+      "sede": 1,
+      "trabajador": "101",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-12T14:01:00",
+          "fechaHoraLocal": "2025-11-12 08:01:00",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "101",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-12",
+      "sede": 1,
+      "trabajador": "105",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-12T15:05:52",
+          "fechaHoraLocal": "2025-11-12 09:05:52",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "105",
+          "sede": 1
+        },
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-13T00:24:21",
+          "fechaHoraLocal": "2025-11-12 18:24:21",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "105",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia Completa",
+      "salida_automatica": false,
+      "salida_registrada": true
+    },
+    {
+      "fecha": "2025-11-12",
+      "sede": 1,
+      "trabajador": "107",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-12T14:00:54",
+          "fechaHoraLocal": "2025-11-12 08:00:54",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "107",
+          "sede": 1
+        },
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-12T23:27:51",
+          "fechaHoraLocal": "2025-11-12 17:27:51",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "107",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-12",
+      "sede": 1,
+      "trabajador": "102",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-12T15:05:46",
+          "fechaHoraLocal": "2025-11-12 09:05:46",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "102",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-12",
+      "sede": 1,
+      "trabajador": "5",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-12T20:57:50",
+          "fechaHoraLocal": "2025-11-12 14:57:50",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "5",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-12",
+      "sede": 1,
+      "trabajador": "114",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-12T20:57:54",
+          "fechaHoraLocal": "2025-11-12 14:57:54",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "114",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "sede": 1,
+      "trabajador": "107",
+      "fecha": "2025-11-13",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-13T13:37:55",
+          "fechaHoraLocal": "2025-11-13 07:37:55",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "107",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "sede": 1,
+      "trabajador": "109",
+      "fecha": "2025-11-14",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-14T15:09:22",
+          "fechaHoraLocal": "2025-11-14 09:09:22",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "109",
+          "sede": 1
+        },
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-15T00:01:52",
+          "fechaHoraLocal": "2025-11-14 18:01:52",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "109",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia Completa",
+      "salida_automatica": false,
+      "salida_registrada": true
+    },
+    {
+      "sede": 1,
+      "trabajador": "104",
+      "fecha": "2025-11-13",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-13T15:04:44",
+          "fechaHoraLocal": "2025-11-13 09:04:44",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "104",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "sede": 1,
+      "trabajador": "105",
+      "fecha": "2025-11-13",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-13T15:08:21",
+          "fechaHoraLocal": "2025-11-13 09:08:21",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "105",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "sede": 1,
+      "trabajador": "101",
+      "fecha": "2025-11-14",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-14T15:02:17",
+          "fechaHoraLocal": "2025-11-14 09:02:17",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "101",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "sede": 1,
+      "trabajador": "106",
+      "fecha": "2025-11-14",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-14T15:02:23",
+          "fechaHoraLocal": "2025-11-14 09:02:23",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "106",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "sede": 1,
+      "trabajador": "109",
+      "fecha": "2025-11-13",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-13T15:57:08",
+          "fechaHoraLocal": "2025-11-13 09:57:08",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "109",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-13",
+      "trabajador": "103",
+      "sede": 1,
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-13T14:42:53",
+          "fechaHoraLocal": "2025-11-13 08:42:53",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "103",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "sede": 1,
+      "trabajador": "105",
+      "fecha": "2025-11-14",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-14T15:10:17",
+          "fechaHoraLocal": "2025-11-14 09:10:17",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "105",
+          "sede": 1
+        },
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-15T00:03:48",
+          "fechaHoraLocal": "2025-11-14 18:03:48",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "105",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia Completa",
+      "salida_automatica": false,
+      "salida_registrada": true
+    },
+    {
+      "trabajador": "5",
+      "fecha": "2025-11-14",
+      "sede": 1,
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-14T22:22:22",
+          "fechaHoraLocal": "2025-11-14 16:22:22",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "5",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-14",
+      "sede": 1,
+      "trabajador": "114",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-14T22:22:28",
+          "fechaHoraLocal": "2025-11-14 16:22:28",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "114",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-15",
+      "sede": 1,
+      "trabajador": "103",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-15T14:47:52",
+          "fechaHoraLocal": "2025-11-15 08:47:52",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "103",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-15",
+      "sede": 1,
+      "trabajador": "106",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-15T15:06:46",
+          "fechaHoraLocal": "2025-11-15 09:06:46",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "106",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-15",
+      "sede": 1,
+      "trabajador": "109",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-15T15:07:15",
+          "fechaHoraLocal": "2025-11-15 09:07:15",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "109",
+          "sede": 1
+        },
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-15T20:11:58",
+          "fechaHoraLocal": "2025-11-15 14:11:58",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "109",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia Completa",
+      "salida_automatica": false,
+      "salida_registrada": true
+    },
+    {
+      "fecha": "2025-11-15",
+      "sede": 1,
+      "trabajador": "105",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-15T15:07:43",
+          "fechaHoraLocal": "2025-11-15 09:07:43",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "105",
+          "sede": 1
+        },
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-15T20:12:18",
+          "fechaHoraLocal": "2025-11-15 14:12:18",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "105",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia Completa",
+      "salida_automatica": false,
+      "salida_registrada": true
+    },
+    {
+      "fecha": "2025-11-15",
+      "sede": 1,
+      "trabajador": "101",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-15T15:29:51",
+          "fechaHoraLocal": "2025-11-15 09:29:51",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "101",
+          "sede": 1
+        },
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-15T22:35:02",
+          "fechaHoraLocal": "2025-11-15 16:35:02",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "101",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia Completa",
+      "salida_automatica": false,
+      "salida_registrada": true
+    },
+    {
+      "fecha": "2025-11-17",
+      "sede": 1,
+      "trabajador": "101",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-17T13:56:27",
+          "fechaHoraLocal": "2025-11-17 07:56:27",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "101",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-17",
+      "sede": 1,
+      "trabajador": "105",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-17T14:01:24",
+          "fechaHoraLocal": "2025-11-17 08:01:24",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "105",
+          "sede": 1
+        },
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-18T00:46:18",
+          "fechaHoraLocal": "2025-11-17 18:46:18",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "105",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia Completa",
+      "salida_automatica": false,
+      "salida_registrada": true
+    },
+    {
+      "fecha": "2025-11-17",
+      "sede": 1,
+      "trabajador": "103",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-17T14:23:49",
+          "fechaHoraLocal": "2025-11-17 08:23:49",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "103",
+          "sede": 1
+        },
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-18T00:22:19",
+          "fechaHoraLocal": "2025-11-17 18:22:19",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "103",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia Completa",
+      "salida_automatica": false,
+      "salida_registrada": true
+    },
+    {
+      "fecha": "2025-11-17",
+      "sede": 1,
+      "trabajador": "109",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-17T15:09:20",
+          "fechaHoraLocal": "2025-11-17 09:09:20",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "109",
+          "sede": 1
+        },
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-18T00:45:59",
+          "fechaHoraLocal": "2025-11-17 18:45:59",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "109",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia Completa",
+      "salida_automatica": false,
+      "salida_registrada": true
+    },
+    {
+      "fecha": "2025-11-18",
+      "sede": 1,
+      "trabajador": "104",
+      "detalle": [
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-18T14:58:52",
+          "fechaHoraLocal": "2025-11-18 08:58:52",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "104",
+          "sede": 1
+        }
+      ],
+      "estado": "Sin asistencia",
+      "salida_automatica": false,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-18",
+      "sede": 1,
+      "trabajador": "109",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-18T15:03:46",
+          "fechaHoraLocal": "2025-11-18 09:03:46",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "109",
+          "sede": 1
+        },
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-19T00:17:45",
+          "fechaHoraLocal": "2025-11-18 18:17:45",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "109",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia Completa",
+      "salida_automatica": false,
+      "salida_registrada": true
+    },
+    {
+      "fecha": "2025-11-18",
+      "sede": 1,
+      "trabajador": "105",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-18T15:05:37",
+          "fechaHoraLocal": "2025-11-18 09:05:37",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "105",
+          "sede": 1
+        },
+        {
+          "tipo": "Salida",
+          "fechaHora": "2025-11-19T00:18:55",
+          "fechaHoraLocal": "2025-11-18 18:18:55",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "105",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia Completa",
+      "salida_automatica": false,
+      "salida_registrada": true
+    },
+    {
+      "fecha": "2025-11-18",
+      "sede": 1,
+      "trabajador": "102",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-18T15:07:32",
+          "fechaHoraLocal": "2025-11-18 09:07:32",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "102",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "fecha": "2025-11-18",
+      "sede": 1,
+      "trabajador": "107",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-18T23:14:52",
+          "fechaHoraLocal": "2025-11-18 17:14:52",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "107",
+          "sede": 1
+        }
+      ],
+      "estado": "Asistencia con salida automática",
+      "salida_automatica": true,
+      "salida_registrada": false
+    },
+    {
+      "sede": 1,
+      "trabajador": "107",
+      "fecha": "2025-11-19",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-19T13:34:04",
+          "fechaHoraLocal": "2025-11-19 07:34:04",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "107",
+          "sede": 1
+        }
+      ],
+      "estado": "Pendiente",
+      "salida_automatica": false,
+      "salida_registrada": false
+    },
+    {
+      "sede": 1,
+      "trabajador": "103",
+      "fecha": "2025-11-19",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-19T14:30:15",
+          "fechaHoraLocal": "2025-11-19 08:30:15",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "103",
+          "sede": 1
+        }
+      ],
+      "estado": "Pendiente",
+      "salida_automatica": false,
+      "salida_registrada": false
+    },
+    {
+      "sede": 1,
+      "trabajador": "109",
+      "fecha": "2025-11-19",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-19T15:04:36",
+          "fechaHoraLocal": "2025-11-19 09:04:36",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "109",
+          "sede": 1
+        }
+      ],
+      "estado": "Pendiente",
+      "salida_automatica": false,
+      "salida_registrada": false
+    },
+    {
+      "sede": 1,
+      "trabajador": "105",
+      "fecha": "2025-11-19",
+      "detalle": [
+        {
+          "tipo": "Entrada",
+          "fechaHora": "2025-11-19T15:10:33",
+          "fechaHoraLocal": "2025-11-19 09:10:33",
+          "device_ip": "192.168.1.101",
+          "origen": "zkteco",
+          "sincronizado": false,
+          "trabajador": "105",
+          "sede": 1
+        }
+      ],
+      "estado": "Pendiente",
+      "salida_automatica": false,
+      "salida_registrada": false
+    }
+  ]
+}

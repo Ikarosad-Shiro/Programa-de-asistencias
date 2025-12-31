@@ -1,1 +1,8 @@
-{"sede": 1, "nombre_sede": "Administración V.C"}
+{
+  "sede": 1,
+  "nombre_sede": "Administración V.C",
+  "setup_done": true,
+  "checador_ip": "192.168.1.101",
+  "ts": 1763673700.3777297,
+  "autosync_interval": 2
+}

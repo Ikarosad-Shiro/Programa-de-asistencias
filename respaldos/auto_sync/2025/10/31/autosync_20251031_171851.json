@@ -1,0 +1,63 @@
+{
+  "meta": {
+    "sede_id": 1,
+    "checador_ip": "192.168.1.101",
+    "interval_min": 10,
+    "simulate": true,
+    "ventana": {
+      "desde_local": "2025-10-24T00:00:00-06:00",
+      "hasta_local": "2025-11-01T00:00:00-06:00"
+    },
+    "ts_local": "2025-10-31T17:18:51.044487-06:00"
+  },
+  "resultado": {
+    "ok": true,
+    "insertados": 7,
+    "actualizados": 1,
+    "eventos": 13,
+    "eventos_detalle": [
+      {
+        "trabajador": 159,
+        "sede": 1,
+        "tipo": "Entrada",
+        "fechaHora": "2025-10-27T19:18:50.405131-06:00",
+        "fuente": "SIM"
+      },
+      {
+        "trabajador": 117,
+        "sede": 1,
+        "tipo": "Salida",
+        "fechaHora": "2025-10-29T00:18:50.405131-06:00",
+        "fuente": "SIM"
+      },
+      {
+        "trabajador": 197,
+        "sede": 1,
+        "tipo": "Entrada",
+        "fechaHora": "2025-10-30T05:18:50.405131-06:00",
+        "fuente": "SIM"
+      },
+      {
+        "trabajador": 119,
+        "sede": 1,
+        "tipo": "Salida",
+        "fechaHora": "2025-10-27T05:18:50.405131-06:00",
+        "fuente": "SIM"
+      },
+      {
+        "trabajador": 105,
+        "sede": 1,
+        "tipo": "Salida",
+        "fechaHora": "2025-10-28T00:18:50.405131-06:00",
+        "fuente": "SIM"
+      },
+      {
+        "trabajador": 171,
+        "sede": 1,
+        "tipo": "Salida",
+        "fechaHora": "2025-10-27T14:18:50.405131-06:00",
+        "fuente": "SIM"
+      }
+    ]
+  }
+}
