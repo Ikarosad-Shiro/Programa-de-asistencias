@@ -11,7 +11,9 @@ from zk import ZK
 
 from servicios.mongo_service import conectar_mongo
 from servicios.checador_service import PUERTO
+from asistencias_rules import sanear_eventos_dia
 
+#from servicios.asistencias_rules import sanear_eventos_dia
 
 # =========================
 # Zona horaria y constantes
@@ -42,6 +44,7 @@ def _parse_datetime_any(value) -> Optional[datetime]:
 
     if isinstance(value, str):
         try:
+            value = value.replace("Z", "+00:00") 
             dt = datetime.fromisoformat(value)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=TZ_LOCAL)
@@ -60,15 +63,20 @@ def _to_utc(dt: datetime) -> datetime:
 
 def _ensure_utc(value) -> Optional[datetime]:
     """
-    Asegura que el valor sea datetime tz-aware en UTC.
-    Acepta datetime (naive/aware) o str.
+    Asegura datetime tz-aware en UTC.
+    - datetime naive: se asume LOCAL (America/Mexico_City) y se convierte a UTC
+    - datetime aware: se convierte a UTC
+    - str: se parsea y se convierte a UTC
     """
     if isinstance(value, datetime):
-        # Si viene naive, **asumimos** que ya estaba en UTC almacenado
-        return value.replace(tzinfo=tz.UTC) if value.tzinfo is None else value.astimezone(tz.UTC)
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=TZ_LOCAL)
+        return value.astimezone(tz.UTC)
+
     if isinstance(value, str):
         dt_loc = _parse_datetime_any(value)
-        return _to_utc(dt_loc) if dt_loc else None
+        return dt_loc.astimezone(tz.UTC) if dt_loc else None
+
     return None
 
 
@@ -94,6 +102,7 @@ def _coerce_db_utc(value) -> Optional[datetime]:
 
     if isinstance(value, str):
         try:
+            value = value.replace("Z", "+00:00")
             dt = datetime.fromisoformat(value)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=tz.UTC)
@@ -323,6 +332,108 @@ def _merge_detalle_existente_y_nuevo(det_actual: List[Dict], det_nuevo: List[Dic
 
     return sorted(merged.values(), key=sort_key)
 
+VALID_TIPOS = {"Entrada", "Salida"}
+
+def _mapear_a_entrada_salida(it: Dict) -> Dict:
+    """
+    Fuerza que tipo sea SOLO Entrada/Salida.
+    Si viene otro valor, lo marca como Desconocido (interno) para inferir luego.
+    """
+    t = it.get("tipo")
+
+    if t in VALID_TIPOS:
+        return it
+
+    it2 = dict(it)
+    it2["tipo_original"] = t
+    it2["tipo"] = "Desconocido"   # marcador interno
+    it2["inferido"] = True
+    it2["correccion"] = it2.get("correccion") or "tipo_fuera_de_catalogo"
+    return it2
+
+def _normalizar_tipos_por_alternancia(detalle: List[Dict]) -> Tuple[List[Dict], bool]:
+    """
+    Normaliza para que TODOS los eventos terminen con tipo Entrada/Salida.
+    Corrige:
+      - tipo Desconocido -> se convierte por alternancia
+      - modo fijo (Entrada, Entrada, Entrada...) -> alterna
+    Devuelve (detalle_normalizado, hubo_correcciones)
+    """
+    if not detalle:
+        return detalle, False
+
+    # 1) Marca tipos fuera de catálogo
+    det = [_mapear_a_entrada_salida(x) for x in detalle]
+
+    # 2) Ordena por fechaHora (UTC preferible)
+    def _ts(it: Dict) -> float:
+        fh = it.get("fechaHora")
+        if isinstance(fh, datetime):
+            if fh.tzinfo is None:
+                fh = fh.replace(tzinfo=tz.UTC)
+            return fh.timestamp()
+        fh2 = _coerce_db_utc(fh)
+        return (fh2 or datetime.min.replace(tzinfo=tz.UTC)).timestamp()
+
+    det.sort(key=_ts)
+
+    # 3) Alternancia
+    hubo = False
+    last_tipo = None
+
+    # Encuentra el primer tipo válido como base (si no hay, asumimos que empieza con Entrada)
+    for it in det:
+        if it.get("tipo") in VALID_TIPOS:
+            last_tipo = it["tipo"]
+            break
+    if last_tipo is None:
+        last_tipo = "Salida"  # para que el primer esperado sea Entrada
+
+    out = []
+    for it in det:
+        t = it.get("tipo")
+        esperado = "Salida" if last_tipo == "Entrada" else "Entrada"
+
+        # Caso A: Desconocido -> esperado
+        if t == "Desconocido":
+            it2 = dict(it)
+            it2["tipo"] = esperado
+            it2["inferido"] = True
+            it2["correccion"] = it2.get("correccion") or "inferido_por_historial"
+            out.append(it2)
+            last_tipo = esperado
+            hubo = True
+            continue
+
+        # Caso B: válido pero repetido -> corregir
+        if t in VALID_TIPOS and t == last_tipo:
+            it2 = dict(it)
+            it2["tipo_original"] = it2.get("tipo_original", t)
+            it2["tipo"] = esperado
+            it2["inferido"] = True
+            it2["correccion"] = "modo_fijo_corregido"
+            out.append(it2)
+            last_tipo = esperado
+            hubo = True
+            continue
+
+        # Caso C: válido y alterna bien
+        if t in VALID_TIPOS:
+            out.append(it)
+            last_tipo = t
+            continue
+
+        # Cualquier cosa rara (no debería llegar): forzar a esperado
+        it2 = dict(it)
+        it2["tipo_original"] = it2.get("tipo_original", t)
+        it2["tipo"] = esperado
+        it2["inferido"] = True
+        it2["correccion"] = it2.get("correccion") or "fallback_forzado"
+        out.append(it2)
+        last_tipo = esperado
+        hubo = True
+
+    return out, hubo
 
 # =========================
 # API principal
@@ -332,49 +443,18 @@ def obtener_asistencias(
     checador_ip: str,
     desde: Optional[datetime | str] = None,
     hasta: Optional[datetime | str] = None,
-    log_fn: Optional[Callable[[str], None]] = None
+    log_fn: Optional[Callable[[str], None]] = None,
+    subir_a_mongo: bool = True,   # 👈 NUEVO
 ) -> Dict:
-    """
-    Lee eventos del checador y los persiste en Mongo agrupados por día/trabajador con
-    la estructura:
-
-    {
-      "trabajador": "105",
-      "sede": 1,
-      "fecha": "YYYY-MM-DD",
-      "detalle": [
-        {
-          "tipo": "Entrada" | "Salida",
-          "fechaHora": <UTC datetime>,
-          "fechaHoraLocal": "YYYY-MM-DD HH:MM:SS",
-          "device_ip": "192.168.1.101",
-          "origen": "zkteco",
-          "sincronizado": false,
-          "trabajador": "105",
-          "sede": 1
-        }
-      ],
-      "estado": "Asistencia Completa" | "Asistencia con salida automática" | "Pendiente" | "Sin asistencia",
-      "salida_automatica": <bool>,
-      "salida_registrada": <bool>
-    }
-    """
     def log(msg: str):
         (log_fn or print)(msg)
 
-    # 1) Mongo
-    cliente, msg = conectar_mongo()
-    if not cliente:
-        raise RuntimeError("No se pudo conectar a MongoDB: " + msg)
-    db = cliente["Registro_Alu"]
-    _ensure_indexes(db)
-
-    # 2) Checador
+    # 1) Checador (SIEMPRE)
     log(f"🔌 Leyendo eventos desde checador {checador_ip}…")
     crudos = _leer_eventos_zk(checador_ip)
     log(f"📦 Recibidos {len(crudos)} evento(s) crudos.")
 
-    # 3) Normalizar
+    # 2) Normalizar
     normalizados: List[Tuple[str, Dict]] = []
     for ev in crudos:
         t, e = _normalizar_evento(ev, checador_ip)
@@ -382,7 +462,7 @@ def obtener_asistencias(
             normalizados.append((t, e))
     log(f"🧰 Normalizados {len(normalizados)} evento(s).")
 
-    # 3.5) Blindaje: forzar que todos los fechaHora queden como datetime UTC
+    # 2.5 Blindaje fechaHora -> datetime UTC
     fixed: List[Tuple[str, Dict]] = []
     for t, e in normalizados:
         fh = e.get("fechaHora")
@@ -400,60 +480,91 @@ def obtener_asistencias(
     log(f"🔍 Tras normalizar: {len(normalizados)} evento(s). Muestra:")
     _debug_dump_event_window(normalizados, log)
 
-    # 👉 Descomenta para procesar SOLO eventos de HOY (LOCAL) durante pruebas
-    # normalizados = _filtrar_solo_hoy(normalizados)
-    # log(f"🎯 Solo HOY (local): {len(normalizados)} evento(s) tras filtro.")
-
-    # 4) Filtrar por rango (si se pasó desde/hasta) – SIEMPRE en UTC tz-aware
+    # 3) Rango (UTC)
     if desde:
         d_utc = _ensure_utc(desde)
         if d_utc:
-            normalizados = [(t, e) for (t, e) in normalizados
-                            if isinstance(e.get("fechaHora"), datetime) and e["fechaHora"] >= d_utc]
+            normalizados = [(t, e) for (t, e) in normalizados if e["fechaHora"] >= d_utc]
 
     if hasta:
         h_utc = _ensure_utc(hasta)
         if h_utc:
-            normalizados = [(t, e) for (t, e) in normalizados
-                            if isinstance(e.get("fechaHora"), datetime) and e["fechaHora"] <= h_utc]
+            # OJO: en tu autosync pasas "mañana 00:00" como EXCLUSIVO,
+            # entonces aquí conviene usar < y no <=
+            normalizados = [(t, e) for (t, e) in normalizados if e["fechaHora"] < h_utc]
 
     log(f"⏱️ Después de rango, quedan {len(normalizados)} evento(s).")
-
     if not normalizados:
-        return {"ok": True, "insertados": 0, "actualizados": 0, "eventos": 0}
+        return {"ok": True, "insertados": 0, "actualizados": 0, "eventos": 0, "documentos": []}
 
-    # 5) Agrupar por (trabajador, fecha_local) + redundancia en cada item
+    # 4) Agrupar por (trabajador, fecha_local)
     agrupado: Dict[Tuple[str, str], List[Dict]] = {}
-    conteo_por_fecha: Dict[str, int] = {}  # debug
+    conteo_por_fecha: Dict[str, int] = {}
     for trabajador, evento in normalizados:
-        # Asegurar UTC siempre
-        if not isinstance(evento.get("fechaHora"), datetime):
-            fixed_dt = _ensure_utc(evento.get("fechaHora"))
-            if not fixed_dt:
-                continue
-            evento["fechaHora"] = fixed_dt
-
         fecha_local = _fecha_local_str(evento["fechaHora"])
-        conteo_por_fecha[fecha_local] = conteo_por_fecha.get(fecha_local, 0) + 1  # debug
+        conteo_por_fecha[fecha_local] = conteo_por_fecha.get(fecha_local, 0) + 1
 
         evento_red = dict(evento)
         evento_red["trabajador"] = trabajador
         evento_red["sede"] = int(sede_id)
-
         agrupado.setdefault((trabajador, fecha_local), []).append(evento_red)
 
-    # DEBUG: muestra distribución por fecha local
     log("🧭 Distribución por fecha (LOCAL) en esta corrida:")
     for f, c in sorted(conteo_por_fecha.items()):
         log(f"   · {f}: {c} evento(s)")
 
-    # 6) Find+Merge+Update por grupo (para calcular estado/flags)
-    col = db.asistencias
-    insertados = 0
-    actualizados = 0
+    # 5) Construir documentos (sin Mongo) o upsert (con Mongo)
+    documentos: List[Dict] = []
     total_eventos = 0
-    ops: List[UpdateOne] = []
 
+    if not subir_a_mongo:
+        # ---- MODO SOLO LECTURA: NO TOCA MONGO ----
+        for (trabajador, fecha_local), eventos in agrupado.items():
+            eventos = _dedupe_eventos(eventos)
+            total_eventos += len(eventos)
+
+            # Ordenar por fechaHora
+            eventos = sorted(eventos, key=lambda x: x["fechaHora"].timestamp())
+
+            # Normalización + rules también en modo lectura
+            detalle_merged = eventos
+            detalle_norm, hubo_norm = _normalizar_tipos_por_alternancia(detalle_merged)
+            detalle_saneado, _meta = sanear_eventos_dia(detalle_norm)
+            detalle_saneado = _merge_detalle_existente_y_nuevo([], detalle_saneado)
+
+            estado, salida_auto, salida_reg = _construye_estado_y_flags(detalle_saneado)
+            hubo_inferidos = hubo_norm or any(e.get("inferido") for e in detalle_saneado)
+
+            documentos.append({
+                "trabajador": trabajador,
+                "sede": int(sede_id),
+                "fecha": fecha_local,
+                "detalle": detalle_saneado,
+                "requiere_revision": bool(hubo_inferidos),
+                "estado": estado,
+                "salida_automatica": salida_auto,
+                "salida_registrada": salida_reg,
+            })
+
+        log(f"📄 Generados {len(documentos)} documento(s) en memoria (sin subir a Mongo).")
+        return {
+            "ok": True,
+            "insertados": 0,
+            "actualizados": 0,
+            "eventos": total_eventos,
+            "documentos": documentos,  # 👈 clave para respaldos
+            "subido_a_mongo": False
+        }
+
+    # ---- MODO NORMAL: con Mongo ----
+    cliente, msg = conectar_mongo()
+    if not cliente:
+        raise RuntimeError("No se pudo conectar a MongoDB: " + msg)
+    db = cliente["Registro_Alu"]
+    _ensure_indexes(db)
+    col = db.asistencias
+
+    ops: List[UpdateOne] = []
     for (trabajador, fecha_local), eventos in agrupado.items():
         eventos = _dedupe_eventos(eventos)
         total_eventos += len(eventos)
@@ -462,32 +573,42 @@ def obtener_asistencias(
         actual = col.find_one(filtro, {"_id": 0, "detalle": 1}) or {}
         detalle_actual = actual.get("detalle", [])
 
-        # Merge sin duplicados (asegura datetime UTC dentro)
         detalle_merged = _merge_detalle_existente_y_nuevo(detalle_actual, eventos)
 
-        # estado + flags
-        estado, salida_auto, salida_reg = _construye_estado_y_flags(detalle_merged)
+        # ✅ 1) Normalización estricta: SOLO Entrada/Salida + corregir modo fijo
+        detalle_norm, hubo_norm = _normalizar_tipos_por_alternancia(detalle_merged)
 
-        update = {
-            "$set": {
-                "trabajador": trabajador,
-                "sede": int(sede_id),
-                "fecha": fecha_local,
-                "detalle": detalle_merged,
-                "estado": estado,
-                "salida_automatica": salida_auto,
-                "salida_registrada": salida_reg,
-            }
-        }
+        # ✅ 2) Aplicar tus reglas del día (rebotes, salida inicial, pairing, autocierre)
+        detalle_saneado, _ = sanear_eventos_dia(detalle_norm)
+
+        # ✅ 3) Re-normalizar por si rules agregó salida automática como string
+        detalle_saneado = _merge_detalle_existente_y_nuevo([], detalle_saneado)
+
+        # ✅ 4) Estado final (Pendiente solo HOY)
+        estado, salida_auto, salida_reg = _construye_estado_y_flags(detalle_saneado)
+
+        # ✅ 5) Marca auditoría si hubo correcciones (normalización o rules)
+        hubo_inferidos = hubo_norm or any(e.get("inferido") for e in detalle_saneado)
+
+
+
+        update = {"$set": {
+            "trabajador": trabajador,
+            "sede": int(sede_id),
+            "fecha": fecha_local,
+            "detalle": detalle_saneado,
+            "estado": estado,
+            "salida_automatica": salida_auto,
+            "salida_registrada": salida_reg,
+            "requiere_revision": bool(hubo_inferidos),
+        }}
+        log(f"🧠 {trabajador} {fecha_local}: merged={len(detalle_merged)} norm={len(detalle_norm)} saneado={len(detalle_saneado)} estado={estado} revision={hubo_inferidos}")
         ops.append(UpdateOne(filtro, update, upsert=True))
 
-    # 7) Bulk write
     try:
         res = col.bulk_write(ops, ordered=False)
-        insertados = res.upserted_count
-        actualizados = res.modified_count
-        log(f"🧾 Bulk resultado: upserted={insertados}, modified={actualizados}, matched={res.matched_count}")
-        return {"ok": True, "insertados": insertados, "actualizados": actualizados, "eventos": total_eventos}
+        log(f"🧾 Bulk resultado: upserted={res.upserted_count}, modified={res.modified_count}, matched={res.matched_count}")
+        return {"ok": True, "insertados": res.upserted_count, "actualizados": res.modified_count, "eventos": total_eventos, "subido_a_mongo": True}
     except PyMongoError as e:
         log(f"❌ Error escribiendo en Mongo: {e}")
         raise

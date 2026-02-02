@@ -521,7 +521,7 @@ class App(tb.Window):
         )
 
     def _real_obtener_asistencias(self, log):
-        """Obtiene asistencias desde el checador, las sube a Mongo y guarda respaldo detallado."""
+        """Obtiene asistencias desde el checador, las procesa y genera respaldo (sin subir a Mongo)."""
         sede_id = self._get_sede_id()
         if not sede_id:
             log("⚠️ Define la sede en configuracion_temporal.json o config.py")
@@ -545,6 +545,7 @@ class App(tb.Window):
                 desde=desde,
                 hasta=hasta,
                 log_fn=log,
+                subir_a_mongo=True,
             )
             ok_flag = bool(r.get("ok")) if isinstance(r, dict) else False
             insertados = r.get("insertados", 0) if isinstance(r, dict) else 0

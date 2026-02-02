@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Respaldos generados
+respaldos/
+
+# Cache de servicios
+servicios/__pycache__/
+
+# Configuración local
+configuracion_temporal.json
+.env
+
+# Entornos virtuales
+.venv/
+venv/
